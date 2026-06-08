@@ -21,6 +21,9 @@ Desktop.ini
 # Build artifact
 ims.jar
 
+# Bundled JRE (generated, too large for git)
+jre/
+
 # Temp files
 *.log
 *.tmp

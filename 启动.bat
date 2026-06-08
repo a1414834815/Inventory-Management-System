@@ -4,11 +4,19 @@ setlocal enabledelayedexpansion
 title IMS v1.0.0
 
 :: ============================================
-:: Find Java
+:: Find Java - prioritize bundled JRE
 :: ============================================
 set JAVA_PATH=
 set JAVAW_PATH=
 
+:: Method 0: Use bundled JRE (no installation needed!)
+if exist "%~dp0jre\bin\javaw.exe" (
+    set JAVAW_PATH=%~dp0jre\bin\javaw.exe
+    set JAVA_PATH=%~dp0jre\bin\java.exe
+    goto :found_java
+)
+
+:: Method 1: Check JAVA_HOME
 if exist "%JAVA_HOME%\bin\javaw.exe" (
     set JAVAW_PATH=%JAVA_HOME%\bin\javaw.exe
     set JAVA_PATH=%JAVA_HOME%\bin\java.exe
