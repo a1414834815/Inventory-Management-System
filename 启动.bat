@@ -113,6 +113,20 @@ pause
 exit /b 1
 
 :open
+:: Extra wait to ensure server is fully ready
+echo Server detected, waiting for full initialization...
+timeout /t 3 /nobreak >nul
+
+:: Verify server actually responds
+curl -s -o NUL http://localhost:8080 2>nul
+if %errorlevel% neq 0 (
+    timeout /t 3 /nobreak >nul
+    curl -s -o NUL http://localhost:8080 2>nul
+    if %errorlevel% neq 0 (
+        echo [WARNING] Server may not be fully ready, opening browser anyway...
+    )
+)
+
 echo Opening browser...
 start "" http://localhost:8080
 
