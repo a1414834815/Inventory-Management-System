@@ -114,7 +114,7 @@ start "IMS Server" /min "!JAVA_PATH!" -jar "%~dp0ims.jar"
 
 :: Wait for server to start
 echo Waiting for server to start...
-timeout /t 6 /nobreak >nul
+timeout /t 3 /nobreak >nul
 
 :: Check if server started
 netstat -ano 2>nul | findstr ":8080 " | findstr "LISTENING" >nul
@@ -125,7 +125,7 @@ if %errorlevel% == 0 (
 
 :: Give it more time
 echo Still waiting...
-timeout /t 5 /nobreak >nul
+timeout /t 3 /nobreak >nul
 netstat -ano 2>nul | findstr ":8080 " | findstr "LISTENING" >nul
 if %errorlevel% == 0 goto :verify_http
 
@@ -148,14 +148,13 @@ exit /b 1
 :: Verify server responds to HTTP
 :: ============================================
 :verify_http
-echo Waiting for full initialization...
 timeout /t 2 /nobreak >nul
 
 curl -s -o NUL http://localhost:8080 2>nul
 if %errorlevel% == 0 goto :open_browser
 
 :: Maybe still initializing
-timeout /t 3 /nobreak >nul
+timeout /t 2 /nobreak >nul
 curl -s -o NUL http://localhost:8080 2>nul
 if %errorlevel% == 0 goto :open_browser
 
