@@ -3,7 +3,9 @@ chcp 65001 >nul 2>&1
 setlocal enabledelayedexpansion
 title IMS v1.0.0
 
+:: ============================================
 :: Find Java
+:: ============================================
 set JAVA_PATH=
 set JAVAW_PATH=
 
@@ -40,7 +42,7 @@ echo ============================================
 echo   [ERROR] Java not found!
 echo ============================================
 echo.
-echo Please install Java 17:
+echo Please install Java 17 or newer from:
 echo   https://adoptium.net/download/
 echo.
 pause
@@ -48,14 +50,37 @@ exit /b 1
 
 :found_java
 
+:: ============================================
 :: Check ims.jar
+:: ============================================
 if not exist "%~dp0ims.jar" (
     echo [ERROR] ims.jar not found!
     pause
     exit /b 1
 )
 
-:: Check if already running
+:: ============================================
+:: Clean up from previous runs
+:: ============================================
+
+:: Remove stale database lock (from hard kill)
+if exist "%~dp0data\ims.lock.db" (
+    echo Cleaning stale database lock...
+    del "%~dp0data\ims.lock.db" 2>nul
+)
+
+:: Kill any stale Java process on port 8080
+for /f "tokens=5" %%a in ('netstat -ano ^| findstr /c:":8080 " ^| findstr /c:"LISTENING" 2^>nul') do (
+    echo Stopping previous server instance...
+    taskkill /pid %%a >nul 2>&1
+    ping -n 3 127.0.0.1 >nul
+    taskkill /f /pid %%a >nul 2>&1
+    ping -n 2 127.0.0.1 >nul
+)
+
+:: ============================================
+:: Check if server is already running (fresh instance)
+:: ============================================
 netstat -ano 2>nul | findstr ":8080 " | findstr "LISTENING" >nul
 if %errorlevel% == 0 (
     echo Server is already running!
@@ -65,69 +90,75 @@ if %errorlevel% == 0 (
     exit /b 0
 )
 
+:: ============================================
+:: Start server
+:: ============================================
 echo ============================================
-echo   IMS v1.0.0
+echo   IMS v1.0.0 - Starting
 echo ============================================
 echo.
 echo Java: !JAVA_PATH!
 echo Starting server...
+echo.
 
-:: Use java (not javaw) so we can see startup in the window
-:: Use start /min to minimize the server console
+:: Use start /min to run server in minimized window
 start "IMS Server" /min "!JAVA_PATH!" -jar "%~dp0ims.jar"
 
-:: Wait for server to start (Spring Boot takes ~5 seconds)
+:: Wait for server to start
 echo Waiting for server to start...
 timeout /t 6 /nobreak >nul
 
-:: Check if server started successfully
+:: Check if server started
 netstat -ano 2>nul | findstr ":8080 " | findstr "LISTENING" >nul
 if %errorlevel% == 0 (
-    echo Server is ready!
-    goto :open
+    echo Server detected, checking HTTP response...
+    goto :verify_http
 )
 
-:: Maybe needs more time
+:: Give it more time
 echo Still waiting...
 timeout /t 5 /nobreak >nul
 netstat -ano 2>nul | findstr ":8080 " | findstr "LISTENING" >nul
-if %errorlevel% == 0 (
-    echo Server is ready!
-    goto :open
-)
+if %errorlevel% == 0 goto :verify_http
 
-:: Failed
+:: Failed to start
 echo.
 echo ============================================
 echo   [ERROR] Server failed to start!
 echo ============================================
 echo.
-echo Possible issues:
-echo   1. Port 8080 is occupied
-echo   2. Java version too old (need 17+)
-echo   3. ims.jar file is corrupted
-echo.
-echo Check server window for details.
+echo Please check:
+echo   1. Java version is 17+ (you have:)
+"!JAVA_PATH!" -version 2>&1
+echo   2. Port 8080 is not occupied
+echo   3. ims.jar is not corrupted
 echo.
 pause
 exit /b 1
 
-:open
-:: Extra wait to ensure server is fully ready
-echo Server detected, waiting for full initialization...
-timeout /t 3 /nobreak >nul
+:: ============================================
+:: Verify server responds to HTTP
+:: ============================================
+:verify_http
+echo Waiting for full initialization...
+timeout /t 2 /nobreak >nul
 
-:: Verify server actually responds
 curl -s -o NUL http://localhost:8080 2>nul
-if %errorlevel% neq 0 (
-    timeout /t 3 /nobreak >nul
-    curl -s -o NUL http://localhost:8080 2>nul
-    if %errorlevel% neq 0 (
-        echo [WARNING] Server may not be fully ready, opening browser anyway...
-    )
-)
+if %errorlevel% == 0 goto :open_browser
 
-echo Opening browser...
+:: Maybe still initializing
+timeout /t 3 /nobreak >nul
+curl -s -o NUL http://localhost:8080 2>nul
+if %errorlevel% == 0 goto :open_browser
+
+:: Server port is open but HTTP not responding yet, open anyway
+echo Server may still be initializing, opening browser...
+
+:: ============================================
+:: Open browser
+:: ============================================
+:open_browser
+echo Opening browser: http://localhost:8080
 start "" http://localhost:8080
 
 echo.
@@ -140,8 +171,13 @@ echo ============================================
 echo.
 pause >nul
 
-:: Stop server
-for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":8080 " ^| findstr "LISTENING" 2^>nul') do (
+:: ============================================
+:: Stop server gracefully
+:: ============================================
+echo Stopping server...
+for /f "tokens=5" %%a in ('netstat -ano ^| findstr /c:":8080 " ^| findstr /c:"LISTENING" 2^>nul') do (
+    taskkill /pid %%a >nul 2>&1
+    ping -n 2 127.0.0.1 >nul
     taskkill /f /pid %%a >nul 2>&1
 )
 echo Server stopped.
