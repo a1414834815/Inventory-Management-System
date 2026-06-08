@@ -1,0 +1,27 @@
+# Data directory (H2 database files)
+data/
+
+# Maven build output
+backend/target/
+backend/apache-maven-*/
+
+# IDE files
+.idea/
+*.iml
+.vscode/
+.project
+.classpath
+.settings/
+
+# OS files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Build artifact
+ims.jar
+
+# Temp files
+*.log
+*.tmp
+maven.zip
