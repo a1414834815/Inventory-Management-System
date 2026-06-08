@@ -3,9 +3,7 @@ chcp 65001 >nul 2>&1
 setlocal enabledelayedexpansion
 title IMS v1.0.0
 
-:: ============================================
 :: Find Java
-:: ============================================
 set JAVA_PATH=
 set JAVAW_PATH=
 
@@ -42,7 +40,7 @@ echo ============================================
 echo   [ERROR] Java not found!
 echo ============================================
 echo.
-echo Please install Java 17 or newer from:
+echo Please install Java 17:
 echo   https://adoptium.net/download/
 echo.
 pause
@@ -50,78 +48,71 @@ exit /b 1
 
 :found_java
 
-:: ============================================
 :: Check ims.jar
-:: ============================================
 if not exist "%~dp0ims.jar" (
     echo [ERROR] ims.jar not found!
     pause
     exit /b 1
 )
 
-:: ============================================
 :: Check if already running
-:: ============================================
 netstat -ano 2>nul | findstr ":8080 " | findstr "LISTENING" >nul
 if %errorlevel% == 0 (
-    echo ============================================
-    echo   Server is already running!
-    echo   Opening browser...
-    echo ============================================
+    echo Server is already running!
+    echo Opening browser...
     start "" http://localhost:8080
-    timeout /t 5 /nobreak >nul
+    timeout /t 3 /nobreak >nul
     exit /b 0
 )
 
-:: ============================================
-:: Start server
-:: ============================================
 echo ============================================
-echo   IMS v1.0.0 - Starting...
+echo   IMS v1.0.0
 echo ============================================
 echo.
 echo Java: !JAVA_PATH!
-echo Starting server, please wait...
+echo Starting server...
 
-:: javaw runs without console, returns immediately
-"!JAVAW_PATH!" -jar "%~dp0ims.jar" > "%~dp0server.log" 2>&1
+:: Use java (not javaw) so we can see startup in the window
+:: Use start /min to minimize the server console
+start "IMS Server" /min "!JAVA_PATH!" -jar "%~dp0ims.jar"
 
-:: ============================================
-:: Wait for port 8080 to be ready
-:: ============================================
-echo Waiting for server to be ready...
-set /a COUNT=0
+:: Wait for server to start (Spring Boot takes ~5 seconds)
+echo Waiting for server to start...
+timeout /t 6 /nobreak >nul
 
-:wait_loop
-ping -n 2 127.0.0.1 >nul
-set /a COUNT+=1
-
+:: Check if server started successfully
 netstat -ano 2>nul | findstr ":8080 " | findstr "LISTENING" >nul
-if %errorlevel% == 0 goto :server_ready
+if %errorlevel% == 0 (
+    echo Server is ready!
+    goto :open
+)
 
-if %COUNT% LSS 30 goto :wait_loop
+:: Maybe needs more time
+echo Still waiting...
+timeout /t 5 /nobreak >nul
+netstat -ano 2>nul | findstr ":8080 " | findstr "LISTENING" >nul
+if %errorlevel% == 0 (
+    echo Server is ready!
+    goto :open
+)
 
-:: ============================================
-:: Timeout - show log
-:: ============================================
+:: Failed
 echo.
 echo ============================================
 echo   [ERROR] Server failed to start!
 echo ============================================
 echo.
-echo Server log (%~dp0server.log):
-echo ----------------------------------------
-type "%~dp0server.log" 2>nul
-echo ----------------------------------------
+echo Possible issues:
+echo   1. Port 8080 is occupied
+echo   2. Java version too old (need 17+)
+echo   3. ims.jar file is corrupted
+echo.
+echo Check server window for details.
 echo.
 pause
 exit /b 1
 
-:: ============================================
-:: Success - open browser
-:: ============================================
-:server_ready
-echo Server is ready!
+:open
 echo Opening browser...
 start "" http://localhost:8080
 
@@ -135,9 +126,7 @@ echo ============================================
 echo.
 pause >nul
 
-:: ============================================
 :: Stop server
-:: ============================================
 for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":8080 " ^| findstr "LISTENING" 2^>nul') do (
     taskkill /f /pid %%a >nul 2>&1
 )
