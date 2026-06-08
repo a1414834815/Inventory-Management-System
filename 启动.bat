@@ -1,138 +1,142 @@
 @echo off
-title 仓库货物出入库管理系统 v1.0.0
+chcp 65001 >nul 2>&1
+setlocal enabledelayedexpansion
+title IMS - Inventory Management System
 
+:: Find Java
+set JAVA_PATH=
+set JAVAW_PATH=
+
+:: Check JAVA_HOME first
+if exist "%JAVA_HOME%\bin\javaw.exe" (
+    set JAVAW_PATH=%JAVA_HOME%\bin\javaw.exe
+    set JAVA_PATH=%JAVA_HOME%\bin\java.exe
+)
+
+:: Search common locations
+if not defined JAVAW_PATH (
+    for /f "delims=" %%f in ('dir /s /b "C:\Program Files\Eclipse Adoptium\jdk*" 2^>nul ^| findstr "\\bin\\javaw.exe$"') do (
+        set JAVAW_PATH=%%f
+        set JAVA_PATH=%%f
+        set JAVA_PATH=!JAVA_PATH:javaw.exe=java.exe!
+        goto :found_java
+    )
+)
+
+if not defined JAVAW_PATH (
+    for /f "delims=" %%f in ('dir /s /b "C:\Program Files\Java\jdk*" 2^>nul ^| findstr "\\bin\\javaw.exe$"') do (
+        set JAVAW_PATH=%%f
+        set JAVA_PATH=%%f
+        set JAVA_PATH=!JAVA_PATH:javaw.exe=java.exe!
+        goto :found_java
+    )
+)
+
+:: Try PATH
+if not defined JAVAW_PATH (
+    where javaw >nul 2>&1
+    if !errorlevel! == 0 (
+        for /f "delims=" %%f in ('where javaw 2^>nul') do set JAVAW_PATH=%%f
+        for /f "delims=" %%f in ('where java 2^>nul') do set JAVA_PATH=%%f
+        goto :found_java
+    )
+)
+
+:: Not found
 echo ============================================
-echo     仓库货物出入库管理系统 v1.0.0
+echo   ERROR: Java not found!
 echo ============================================
 echo.
+echo Please install Java 17 or newer:
+echo   https://adoptium.net/download/
+echo.
+echo After installation, restart your computer
+echo and run this script again.
+echo.
+pause
+exit /b 1
 
-:: ============================================
-:: 1. 查找 Java
-:: ============================================
-set JAVA_EXE=
-set JAVAW_EXE=
+:found_java
+echo ============================================
+echo   IMS v1.0.0 - Starting...
+echo ============================================
+echo.
+echo Java found: !JAVA_PATH!
 
-:: 尝试从 JAVA_HOME 环境变量获取
-if exist "%JAVA_HOME%\bin\javaw.exe" (
-    set JAVAW_EXE=%JAVA_HOME%\bin\javaw.exe
-    set JAVA_EXE=%JAVA_HOME%\bin\java.exe
-)
-
-:: 尝试从 PATH 获取
-if not defined JAVAW_EXE (
-    for %%i in (javaw.exe) do set JAVAW_EXE=%%~$PATH:i
-)
-if not defined JAVA_EXE (
-    for %%i in (java.exe) do set JAVA_EXE=%%~$PATH:i
-)
-
-:: 自动搜索常见安装位置
-if not defined JAVAW_EXE (
-    for /d %%d in ("C:\Program Files\Eclipse Adoptium\*") do (
-        if exist "%%d\bin\javaw.exe" (
-            set JAVAW_EXE=%%d\bin\javaw.exe
-            set JAVA_EXE=%%d\bin\java.exe
-        )
-    )
-)
-if not defined JAVAW_EXE (
-    for /d %%d in ("C:\Program Files\Java\*") do (
-        if exist "%%d\bin\javaw.exe" (
-            set JAVAW_EXE=%%d\bin\javaw.exe
-            set JAVA_EXE=%%d\bin\java.exe
-        )
-    )
-)
-
-if not defined JAVAW_EXE (
-    echo [错误] 未找到 Java 运行环境！
-    echo.
-    echo 请安装 Java 17 或更高版本：
-    echo https://adoptium.net/download/
-    echo.
-    echo 安装后重新运行此脚本。
-    echo.
-    pause
-    exit /b 1
-)
-
-echo [Java] %JAVA_EXE%
-
-:: ============================================
-:: 2. 检查 ims.jar 是否存在
-:: ============================================
+:: Check jar exists
 if not exist "%~dp0ims.jar" (
-    echo [错误] 未找到 ims.jar 文件！
-    echo 请确保 ims.jar 与本脚本在同一目录。
+    echo ERROR: ims.jar not found in current folder!
     pause
     exit /b 1
 )
 
-:: ============================================
-:: 3. 检查服务是否已在运行
-:: ============================================
-powershell -Command "try { $r = Invoke-WebRequest -Uri 'http://localhost:8080' -UseBasicParsing -TimeoutSec 2; exit 0 } catch { exit 1 }" >nul 2>&1
-if %errorlevel% == 0 (
-    echo [提示] 服务已在运行中，直接打开浏览器...
+:: Check if already running
+powershell -NoProfile -Command "try{$r=Invoke-WebRequest 'http://localhost:8080' -UseBasicParsing -TimeoutSec 2;exit 0}catch{exit 1}" >nul 2>&1
+if !errorlevel! == 0 (
+    echo.
+    echo Server is already running!
+    echo Opening browser...
     start "" http://localhost:8080
-    echo 浏览器已打开: http://localhost:8080
     pause
     exit /b 0
 )
 
-:: ============================================
-:: 4. 释放已占用的端口
-:: ============================================
-for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":8080.*LISTENING" 2^>nul') do (
-    echo [提示] 端口 8080 被占用 (PID: %%a)，正在释放...
+:: Kill stale process on port 8080
+for /f "tokens=5" %%a in ('netstat -ano ^| findstr /c:":8080 " ^| findstr /c:"LISTENING" 2^>nul') do (
+    echo Releasing port 8080 (PID: %%a)...
     taskkill /f /pid %%a >nul 2>&1
-    timeout /t 2 /nobreak >nul
+    ping -n 3 127.0.0.1 >nul
 )
 
-:: ============================================
-:: 5. 启动后端服务
-:: ============================================
-echo [启动] 正在启动后端服务...
-start /B "" "%JAVAW_EXE%" -jar "%~dp0ims.jar" >nul 2>&1
+:: Start server in background
+echo Starting server...
+start /B "" "!JAVAW_PATH!" -jar "%~dp0ims.jar" > "%~dp0server.log" 2>&1
 
-:: ============================================
-:: 6. 等待服务就绪
-:: ============================================
-echo [等待] 等待服务就绪...
-set /a count=0
-:wait_loop
-timeout /t 1 /nobreak >nul
-set /a count+=1
+:: Wait for server
+echo Waiting for server to be ready...
+set /a WAIT_COUNT=0
+:wait
+ping -n 2 127.0.0.1 >nul
+set /a WAIT_COUNT+=1
 
-powershell -Command "try { $r = Invoke-WebRequest -Uri 'http://localhost:8080' -UseBasicParsing -TimeoutSec 2; exit 0 } catch { exit 1 }" >nul 2>&1
-if %errorlevel% == 0 goto ready
-if %count% LSS 30 goto wait_loop
+powershell -NoProfile -Command "try{$r=Invoke-WebRequest 'http://localhost:8080' -UseBasicParsing -TimeoutSec 2;exit 0}catch{exit 1}" >nul 2>&1
+if !errorlevel! == 0 (
+    echo Server is ready!
+    goto :open_browser
+)
 
-echo [错误] 服务启动超时 (已等待 30 秒)
-echo 请确认 Java 版本为 17 或更高版本。
-"%JAVA_EXE%" -version
+if !WAIT_COUNT! LSS 20 (
+    echo   Waiting... (!WAIT_COUNT!/20^)
+    goto :wait
+)
+
+:: Timeout
+echo.
+echo ============================================
+echo   ERROR: Server failed to start!
+echo ============================================
+echo.
+echo Server log:
+type "%~dp0server.log" 2>nul
+echo.
 pause
 exit /b 1
 
-:: ============================================
-:: 7. 打开浏览器
-:: ============================================
-:ready
-echo [完成] 正在打开浏览器...
+:open_browser
+echo Opening browser: http://localhost:8080
 start "" http://localhost:8080
 
 echo.
 echo ============================================
-echo  系统已启动！访问地址: http://localhost:8080
-echo  关闭此窗口将停止服务。
+echo   IMS is running!
+echo   Address: http://localhost:8080
+echo   Close this window to stop the server.
 echo ============================================
 echo.
 pause >nul
 
-:: ============================================
-:: 8. 停止服务
-:: ============================================
-for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":8080.*LISTENING" 2^>nul') do (
+:: Cleanup
+for /f "tokens=5" %%a in ('netstat -ano ^| findstr /c:":8080 " ^| findstr /c:"LISTENING" 2^>nul') do (
     taskkill /f /pid %%a >nul 2>&1
 )
-echo 服务已停止。
+echo Server stopped.
